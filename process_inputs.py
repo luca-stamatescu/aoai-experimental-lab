@@ -11,7 +11,7 @@ from dotenv import load_dotenv
 load_dotenv("./.env")  
   
 # Constants  
-TEMP_FOLDER = "./temp_uploads"  
+TEMP_FOLDER = "./use-cases/Custom Scenario/images"
   
 # Function to process PDFs and convert them to images  
 def process_pdf(pdf_path, output_folder):  
@@ -62,6 +62,7 @@ def process_images_and_generate_descriptions(image_files, output_folder):
             # Save the processed image to the output folder (if not already there)  
             if image_file != os.path.join(output_folder, os.path.basename(image_file)):  
                 image.save(os.path.join(output_folder, os.path.basename(image_file)), "JPEG")  
+            
   
 # Main function to process uploaded files  
 def process_inputs(uploaded_files):  

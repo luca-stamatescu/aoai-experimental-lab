@@ -16,19 +16,36 @@ from PIL import Image
 import base64
 import io
 import fitz  # PyMuPDF
+import pandas as pd
+from random import randint
 from process_inputs import process_inputs  
 # Load environment variables    
 load_dotenv("./.env")    
 
 # Define a flag to toggle deletion of the temporary folder
 DELETE_TEMP_FOLDER = os.getenv("DELETE_TEMP_FOLDER", "true").lower() == "true"
-TEMP_FOLDER = "./temp_uploads"
+TEMP_FOLDER = "./use-cases/Custom Scenario/images"
+
+
+
 
 # Function to read XML file content as a string  
 def load_use_case_from_file(file_path):  
     with open(file_path, 'r') as file:  
         return file.read()  
     
+
+# Load the CSV file into a DataFrame
+csv_file_path = './o1-vs-4o-scenarios.csv'
+df = pd.read_csv(csv_file_path)
+# Function to get the prompt based on the use case
+def get_prompt(use_case):
+    row = df[df['Use Case'] == use_case]
+    if not row.empty:
+        return row.iloc[0]['Prompt']
+    else:
+        return "Error - Prompt not found."
+
 # Define function for calling GPT4o with streaming  
 def gpt4o_call(system_message, prompt, result_dict, queue):    
     client = AzureOpenAI(    
@@ -147,62 +164,35 @@ def process_pdf(pdf_path, output_folder):
         image_path = os.path.join(output_folder, f"{os.path.splitext(os.path.basename(pdf_path))[0]}_page_{page_num + 1}.jepg")
         img.save(image_path, "JPEG")
 
-# Streamlit app    
-def main():    
-    st.set_page_config(page_title="o1 vs 4o Use Case Comparison", layout="wide")    
-    st.title("o1 vs 4o Use Case Comparison")    
-    
-    # Load use case from file  
-    use_case_path = './use-cases/home-insurance-claim/Claim Processing.xml'  
-    home_insurance_claim = load_use_case_from_file(use_case_path)  
-    
-    # Use case dropdown    
-    use_cases = {    
-        "Greeting": "Hello, how are you?",    
-        "Weather Inquiry": "What's the weather like today?",    
-        "Joke Request": "Tell me a joke.",    
-        "Home Insurance Claim": home_insurance_claim  
-        # Add more prebuilt use cases as needed    
-    }    
-    
-    selected_use_case = st.selectbox("Select a use case:", list(use_cases.keys()))    
-    default_input = use_cases[selected_use_case]    
-    
-    # Input box (takes up the width of the screen)    
-    user_input = st.text_area("Enter your input:", value=default_input, height=100)    
+def load_images_and_descriptions(selected_title):
+    use_case_folder = f"./use-cases/{selected_title}/images"
 
-    # Section to upload supporting documents
-    st.subheader("Upload Supporting Documents")
-    uploaded_files = st.file_uploader("Choose images or PDFs", accept_multiple_files=True, type=["jpg", "jpeg", "png", "pdf"])
-  
-    # Process uploaded files  
-    if uploaded_files and st.button("Upload Files"):  
-        # Process the files and generate descriptions  
-        process_inputs(uploaded_files)  
-  
-        # Load images and descriptions from TEMP_FOLDER  
-        image_files = [os.path.join(TEMP_FOLDER, f) for f in os.listdir(TEMP_FOLDER) if f.lower().endswith(('.jpg', '.jpeg', '.png'))]  
-        descriptions = []  
-        for img_file in image_files:  
-            base_name = os.path.splitext(os.path.basename(img_file))[0]  
-            description_path = os.path.join(TEMP_FOLDER, f"{base_name}.txt")  
-            with open(description_path, 'r', encoding='utf-8') as f:  
-                description = f.read()  
-                descriptions.append((img_file, description))  
-  
-        if descriptions:  
-            st.session_state['combined_text'] = user_input + "\n\n" + "\n\n".join([desc for _, desc in descriptions])  
-            st.session_state['descriptions'] = descriptions
-        else:  
-            st.session_state['combined_text'] = user_input  
-            st.session_state['descriptions'] = []
-  
-    # Display images as tiles with descriptions  
-    if 'descriptions' in st.session_state:
-        st.subheader("Uploaded Images and Descriptions")  
-        cols = st.columns(3)  
-        fixed_height = 300  # Set a fixed height for the combined image and text  
-  
+    if os.path.exists(use_case_folder):
+        image_files = [os.path.join(use_case_folder, f) for f in os.listdir(use_case_folder) if f.lower().endswith(('.jpg', '.jpeg', '.png'))]
+        descriptions = []
+        for img_file in image_files:
+            base_name = os.path.splitext(os.path.basename(img_file))[0]
+            description_path = os.path.join(use_case_folder, f"{base_name}.txt")
+            if os.path.exists(description_path):
+                with open(description_path, 'r', encoding='utf-8') as f:
+                    description = f.read()
+                    descriptions.append((img_file, description))
+    else:
+        image_files = []
+        descriptions = []
+
+    if descriptions:
+        st.session_state['descriptions'] = descriptions
+    else:
+        st.session_state['descriptions'] = []
+
+# Streamlit app    
+def main():
+
+    def render_images_and_descriptions():  
+        cols = st.columns(3)  # Adjust the number of columns as needed  
+        fixed_height = 200  # Fixed height for images in pixels  
+    
         for i, (img_path, description) in enumerate(st.session_state['descriptions']):  
             image = Image.open(img_path)  
             col = cols[i % 3]  
@@ -210,116 +200,334 @@ def main():
                 buffered = io.BytesIO()  
                 image.save(buffered, format="JPEG")  
                 img_str = base64.b64encode(buffered.getvalue()).decode()  
+                # Generate a unique key based on description content  
+                unique_id = f"{i}"  
                 col.markdown(  
                     f"""  
                     <style>  
-                        .image-tile {{  
+                        .image-container-{unique_id} {{  
                             height: {fixed_height}px;  
-                            display: flex;  
-                            flex-direction: column;  
-                            justify-content: space-between;  
-                            margin: 10px;  
-                            border: 1px solid #ddd;  
-                            border-radius: 8px;  
-                            overflow: hidden;  
-                            box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);  
-                            transition: transform 0.2s;  
-                        }}  
-                        .image-tile:hover {{  
-                            transform: scale(1.05);  
-                        }}  
-                        .image-container {{  
-                            flex: 1;  
                             display: flex;  
                             align-items: center;  
                             justify-content: center;  
                             overflow: hidden;  
+                            margin-bottom: 5px;  
                         }}  
-                        .image-container img {{  
-                            max-height: {fixed_height - 100}px;  
+                        .image-container-{unique_id} img {{  
+                            height: 100%;  
                             width: auto;  
-                        }}  
-                        .description-container {{  
-                            height: 100px;  
-                            width: 100%;  
-                            padding: 10px;  
-                            background: #f9f9f9;  
-                            border-top: 1px solid #ddd;  
+                            object-fit: cover;  
                         }}  
                     </style>  
-                    <div class='image-tile'>  
-                        <div class='image-container'>  
-                            <img src='data:image/jpeg;base64,{img_str}'>  
-                        </div>  
-                        <div class='description-container'>  
-                            <textarea style='height: 100%; width: 100%; border: none; resize: none;' disabled>{description}</textarea>  
-                        </div>  
+                    <div class='image-container-{unique_id}'>  
+                        <img src='data:image/jpeg;base64,{img_str}' alt='Image'>  
                     </div>  
                     """,  
                     unsafe_allow_html=True  
                 )  
-  
-    else:  
-        # No uploaded files; use the user_input as combined_text  
-        st.session_state['combined_text'] = user_input  
+                # Use st.text_area for the description with a unique key  
+                col.text_area("Description", description, height=100, key=f"description_{i}")  
+
+    st.set_page_config(page_title="Azure OpenAI Studio Experimental Lab | GPT-4o vs 4o Comparison tool", layout="wide")
+    selected_item = st.sidebar.empty()
+
+    def set_selected_item(item):
+        st.session_state.selected_title = item
+        load_images_and_descriptions(item)
+
+    # Create two columns
+    col1, col2 = st.sidebar.columns([8, 3])  # Adjust the ratio as needed
+
+    # Place the title in the first column
+    with col1:
+        st.title("Azure OpenAI Experimental Lab 🔬")
+
+    # Place the image in the second column
+    with col2:
+        st.text("")
+        st.text("")
+        st.image("./azureopenaistudio.png", width=50)
+ 
+    st.sidebar.subheader("GPT-4o vs o1-preview comparison tool") 
+
+    st.sidebar.markdown("---")  
+
+    # Custom CSS to make buttons full width and prevent wrapping
+    st.sidebar.markdown("""
+        <style>
+        .stButton button {
+            width: 100%;
+            white-space: nowrap;
+        }
+        </style>
+    """, unsafe_allow_html=True)
+
+    # # Hidden text input to store the selected item
+    # st.sidebar.text_input("", key="selected_item", on_change=lambda: set_selected_item(st.session_state.selected_item))
+    if st.sidebar.button("Custom Scenario", key="custom_1"):
+        set_selected_item("Custom Scenario")
+    st.sidebar.markdown("---") 
     
-    # Button to submit    
-    if st.button("Submit"):    
-        # Display placeholders for responses    
-        col1, col2 = st.columns(2)    
+    # Banking section
+    st.sidebar.header("Banking")  
+    if st.sidebar.button("Credit Risk Assessment and Management", key="banking_1"):
+        set_selected_item("Credit Risk Assessment and Management")
+    if st.sidebar.button("Fraud Detection and Prevention", key="banking_2"):
+        set_selected_item("Fraud Detection and Prevention")
+    if st.sidebar.button("Regulatory Compliance and Reporting", key="banking_3"):
+        set_selected_item("Regulatory Compliance and Reporting")
+    if st.sidebar.button("Customer Relationship Management", key="banking_4"):
+        set_selected_item("Customer Relationship Management")
+    if st.sidebar.button("Investment and Portfolio Management", key="banking_5"):
+        set_selected_item("Investment and Portfolio Management")
+    st.sidebar.markdown("---") 
     
-        with col1:    
-            st.subheader("4o Model Response")    
-            response_placeholder_4o = st.empty()    
-            time_placeholder_4o = st.empty()    
     
-        with col2:    
-            st.subheader("o1 Model Response")    
-            response_placeholder_o1 = st.empty()    
-            time_placeholder_o1 = st.empty()    
+    # Insurance section
+    st.sidebar.header("Insurance")  
+    if st.sidebar.button("Home Insurance Claim", key="insurance_1"):
+        set_selected_item("Home Insurance Claim")
+    if st.sidebar.button("Auto Insurance Claim", key="insurance_2"):
+        set_selected_item("Auto Insurance Claim")
+    if st.sidebar.button("Customer Service and Retention", key="insurance_3"):
+        set_selected_item("Customer Service and Retention")
+    if st.sidebar.button("Product Development and Innovation", key="insurance_4"):
+        set_selected_item("Product Development and Innovation")
+    if st.sidebar.button("Risk Management and Compliance", key="insurance_5"):
+        set_selected_item("Risk Management and Compliance")
+    st.sidebar.markdown("---")  
+
+ 
+
+    # Retail section
+    st.sidebar.header("Retail")  
+    if st.sidebar.button("Inventory and Supply Chain Management", key="retail_1"):
+        set_selected_item("Inventory and Supply Chain Management")
+    if st.sidebar.button("Merchandising and Pricing", key="retail_2"):
+        set_selected_item("Merchandising and Pricing")
+    if st.sidebar.button("Customer Segmentation and Personalization", key="retail_3"):
+        set_selected_item("Customer Segmentation and Personalization")
+    if st.sidebar.button("Omnichannel and E-commerce", key="retail_4"):
+        set_selected_item("Omnichannel and E-commerce")
+    if st.sidebar.button("Loyalty and Retention", key="retail_5"):
+        set_selected_item("Loyalty and Retention")
+    st.sidebar.markdown("---")  
+
+
+
+    # Utilities section
+    st.sidebar.header("Utilities")  
+    if st.sidebar.button("Demand and Supply Management", key="utilities_1"):
+        set_selected_item("Demand and Supply Management")
+    if st.sidebar.button("Asset and Network Management", key="utilities_2"):
+        set_selected_item("Asset and Network Management")
+    if st.sidebar.button("Customer Service and Billing", key="utilities_3"):
+        set_selected_item("Customer Service and Billing")
+    if st.sidebar.button("Energy Efficiency and Sustainability", key="utilities_4"):
+        set_selected_item("Energy Efficiency and Sustainability")
+    if st.sidebar.button("Regulatory Compliance and Reporting", key="utilities_5"):
+        set_selected_item("Regulatory Compliance and Reporting")
+    st.sidebar.markdown("---")  
+
+    # Mining section
+    st.sidebar.header("Mining")  
+    if st.sidebar.button("Exploration and Feasibility", key="mining_1"):
+        set_selected_item("Exploration and Feasibility")
+    if st.sidebar.button("Mine Planning and Design", key="mining_2"):
+        set_selected_item("Mine Planning and Design")
+    if st.sidebar.button("Production and Processing", key="mining_3"):
+        set_selected_item("Production and Processing")
+    if st.sidebar.button("Environmental and Social Impact", key="mining_4"):
+        set_selected_item("Environmental and Social Impact")
+    if st.sidebar.button("Health and Safety", key="mining_5"):
+        set_selected_item("Health and Safety")
+    st.sidebar.markdown("---")  
+
+    # Telecommunications section
+    st.sidebar.header("Telecommunications")  
+    if st.sidebar.button("Network Planning and Optimization", key="telecom_1"):
+        set_selected_item("Network Planning and Optimization")
+    if st.sidebar.button("Service Development and Innovation", key="telecom_2"):
+        set_selected_item("Service Development and Innovation")
+    if st.sidebar.button("Customer Acquisition and Retention", key="telecom_3"):
+        set_selected_item("Customer Acquisition and Retention")
+    if st.sidebar.button("Billing and Revenue Management", key="telecom_4"):
+        set_selected_item("Billing and Revenue Management")
+    if st.sidebar.button("Regulatory Compliance and Reporting", key="telecom_5"):
+        set_selected_item("Regulatory Compliance and Reporting")
+    st.sidebar.markdown("---")  
+
+    # Healthcare section
+    st.sidebar.header("Healthcare")  
+    if st.sidebar.button("Diagnosis and Treatment", key="healthcare_1"):
+        set_selected_item("Diagnosis and Treatment")
+    if st.sidebar.button("Care Coordination and Management", key="healthcare_2"):
+        set_selected_item("Care Coordination and Management")
+    if st.sidebar.button("Disease Prevention and Health Promotion", key="healthcare_3"):
+        set_selected_item("Disease Prevention and Health Promotion")
+    if st.sidebar.button("Research and Innovation", key="healthcare_4"):
+        set_selected_item("Research and Innovation")
+    if st.sidebar.button("Compliance and Reporting", key="healthcare_5"):
+        set_selected_item("Compliance and Reporting")
+    st.sidebar.markdown("---")  
+
+    # Education section
+    st.sidebar.header("Education")  
+    if st.sidebar.button("Curriculum Design and Delivery", key="education_1"):
+        set_selected_item("Curriculum Design and Delivery")
+    if st.sidebar.button("Assessment and Evaluation", key="education_2"):
+        set_selected_item("Assessment and Evaluation")
+    if st.sidebar.button("Student Support and Engagement", key="education_3"):
+        set_selected_item("Student Support and Engagement")
+    if st.sidebar.button("Professional Development and Collaboration", key="education_4"):
+        set_selected_item("Professional Development and Collaboration")
+    if st.sidebar.button("Administration and Management", key="education_5"):
+        set_selected_item("Administration and Management")
+    st.sidebar.markdown("---")  
+
     
-        # Dictionary to store results    
-        result_dict = {}    
-        queue = Queue()  
+    if 'selected_title' not in st.session_state or not st.session_state['selected_title']:
+        st.markdown("### Overview")
+        st.markdown("This tool is designed to help you explore the differences between OpenAI's o1-preview model, and the GPT-4o model. o1 is a new class of model which unlocks advanced reasoning capabilities for LLMs. By spending more time upfront thinking about the problem, o1 considers a range of edge cases and potential situations to arrive at a much better conclusion. This comes at the cost of latency.\n o1 is poised to transform many industries, and this tool is set up to let you explore these.")
+        st.markdown("### Instructions")
+        st.markdown("Click on a scenario on the left to get started. You can also upload your own scenario by selecting 'Custom Scenario'.")
+
+
+    else:
+        # Main content
+        st.title(st.session_state.get("selected_title", "Custom Scenario"))
+
+
+
+
+        # Custom CSS to hide Streamlit header and footer and adjust padding
+        hide_streamlit_style = """
+            <style>
+            #MainMenu {visibility: hidden;}
+            footer {visibility: hidden;}
+            header {visibility: hidden;}
+            .css-18e3th9 {padding-top: 0;}
+            .css-1d391kg {padding-top: 0;}
+            </style>
+        """
+        st.markdown(hide_streamlit_style, unsafe_allow_html=True)
+
+        
+        # Retrieve the selected use case from session state
+        selected_use_case = st.session_state.get("selected_title", "Custom Scenario")
+
+        # Get the default input based on the selected use case
+        default_input = get_prompt(selected_use_case)
+
+        # Input box (takes up the width of the screen)   
+        st.markdown("##### Scenario description")
+        #  
+        user_input = st.text_area("", value=default_input, height=150)    
+
+        # Section to upload supporting documents
+        st.markdown("##### Upload Supporting Documents")
+        
+        # Use session state to store uploaded files and the uploader key
+        if 'uploaded_files' not in st.session_state:
+            st.session_state.uploaded_files = None
+        if 'uploader_key' not in st.session_state:
+            st.session_state.uploader_key = str(randint(1000, 100000000))
+        
+        # File uploader with a unique key
+        uploaded_files = st.file_uploader("Choose images or PDFs", accept_multiple_files=True, type=["jpg", "jpeg", "png", "pdf"])
+        
+        # Button to delete uploaded files
+        if st.button("Delete uploaded files"):
+            if DELETE_TEMP_FOLDER and os.path.exists(TEMP_FOLDER):
+                shutil.rmtree(TEMP_FOLDER)  
+                st.session_state.descriptions=None
+            
+
+        # Process uploaded files
+        if uploaded_files and st.button("Upload Files"):
+            process_inputs(uploaded_files)
+            load_images_and_descriptions("Custom Scenario")
     
-        # Start threads for both API calls    
-        threads = []    
-        t1 = threading.Thread(target=gpt4o_call, args=("You are a helpful AI assistant.", st.session_state['combined_text'], result_dict, queue))    
-        t2 = threading.Thread(target=o1_call, args=("You are a helpful AI assistant.", st.session_state['combined_text'], result_dict))    
-        threads.append(t1)    
-        threads.append(t2)    
-        t1.start()    
-        t2.start()    
+        # Display images as tiles with descriptions  
+        if 'descriptions' in st.session_state and st.session_state.descriptions!=None:
+            # Call the function to render images and descriptions
+            render_images_and_descriptions()
     
-        # Update the Streamlit UI with the streamed response  
-        while t1.is_alive():  
-            while not queue.empty():  
-                response_placeholder_4o.write(queue.get())  
-            time.sleep(0.1)  
-    
-        # Wait for both threads to complete    
-        for t in threads:    
-            t.join()    
-    
-        # Display the 4o response and elapsed time  
-        with col1:  
-            response_placeholder_4o.write(result_dict['4o']['response'])    
-            time_placeholder_4o.write(f"Elapsed time: {result_dict['4o']['time']:.2f} seconds")  
-    
-        # Display the O1 response and elapsed time    
-        with col2:    
-            response_placeholder_o1.write(result_dict['o1']['response'])    
-            time_placeholder_o1.write(f"Elapsed time: {result_dict['o1']['time']:.2f} seconds")    
-    
-        # Compare the responses and display the comparison  
-        st.subheader("Comparison of Responses")  
-        comparison_result = compare_responses(result_dict['4o']['response'], result_dict['o1']['response'])  
-        st.write(comparison_result)  
+        
+        # Button to submit    
+        if st.button("Submit"): 
+            with st.spinner('Processing...'):
+                if st.session_state['descriptions']:  
+                    # Ensure descriptions is a string
+                    conactenated_descriptions=""
+                    descriptions = st.session_state['descriptions']
+                    if isinstance(descriptions, list):
+                        for description in descriptions:
+                            conactenated_descriptions=conactenated_descriptions+description[1]
+                    st.session_state['prompt'] = user_input + "\n\n" + conactenated_descriptions
+                else:  
+                    st.session_state['prompt'] = user_input
+
+                # Display placeholders for responses    
+                col1, col2 = st.columns(2)    
+                
+                with col1:    
+                    st.subheader("4o Response")
+                    st.markdown("---")
+                    response_placeholder_4o = st.empty()  
+                    st.markdown("---")
+                    st.markdown("##### Timing")    
+                    time_placeholder_4o = st.markdown("Processing...")   
+                
+                with col2:    
+                    st.subheader("o1-preview Response")   
+                    st.markdown("---")
+                    response_placeholder_o1 = st.empty() 
+                    st.markdown("---")
+                    st.markdown("##### Timing")   
+                    time_placeholder_o1 = st.markdown("Processing...")   
+                
+                # Dictionary to store results    
+                result_dict = {}    
+                queue = Queue()  
+                
+                # Start threads for both API calls    
+                threads = []    
+                t1 = threading.Thread(target=gpt4o_call, args=("You are a helpful AI assistant.", st.session_state['prompt'], result_dict, queue))    
+                t2 = threading.Thread(target=o1_call, args=("You are a helpful AI assistant.", st.session_state['prompt'], result_dict))    
+                threads.append(t1)    
+                threads.append(t2)    
+                t1.start()    
+                t2.start()    
+                
+                # Update the Streamlit UI with the streamed response  
+                while t1.is_alive():  
+                    while not queue.empty():  
+                        response_placeholder_4o.write(queue.get())  
+                    time.sleep(0.1)  
+                
+                # Wait for both threads to complete    
+                for t in threads:    
+                    t.join()    
+                
+                # Display the 4o response and elapsed time  
+                with col1:
+                    response_placeholder_4o.write(result_dict['4o']['response'])  
+                    time_placeholder_4o.write(f"Elapsed time: {result_dict['4o']['time']:.2f} seconds")  
+                
+                # Display the O1 response and elapsed time    
+                with col2:    
+                    response_placeholder_o1.write(result_dict['o1']['response'])   
+                    time_placeholder_o1.write(f"Elapsed time: {result_dict['o1']['time']:.2f} seconds")    
+            st.markdown("---")
+            # Compare the responses and display the comparison  
+            st.subheader("Comparison of Responses")  
+
+            with st.spinner('Processing...'):
+                comparison_result = compare_responses(result_dict['4o']['response'], result_dict['o1']['response'])  
+                st.write(comparison_result)
     
 
 
 if __name__ == "__main__":
-    # Clean up the temporary folder if the flag is set
-    if DELETE_TEMP_FOLDER and os.path.exists(TEMP_FOLDER):
-        shutil.rmtree(TEMP_FOLDER)    
     main()
