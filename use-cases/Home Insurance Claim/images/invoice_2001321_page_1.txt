@@ -1,0 +1,37 @@
+Here is a detailed description of the image:
+
+The image is a tax invoice from "Contoso Plumbing." The layout is simple and professional, with the following details:
+
+- **Header:**
+  - "Contoso Plumbing" is on the top left.
+  - "Tax Invoice" is on the top right.
+
+- **Bill To:**
+  - Addressed to "1 Smith St, Melbourne, Vic, Australia, 3000."
+
+- **Invoice Details:**
+  - **Invoice Number:** 2021321
+  - **Date:** 02/10/2024
+
+- **Table of Charges:**
+  - The table has four columns: Description, Quantity, Unit price, and Amount.
+  - **Rows:**
+    1. **Description:** Call out fee for quoting
+       - **Quantity:** 1
+       - **Unit price:** $100.00
+       - **Amount:** $100.00
+    2. **Description:** Labour
+       - **Quantity:** 5
+       - **Unit price:** $200.00
+       - **Amount:** $1,000.00
+    3. **Description:** Copper and PVC piping materials
+       - **Quantity:** 1
+       - **Unit price:** $100.00
+       - **Amount:** $100.00
+
+- **Totals:**
+  - **Total without GST:** $1,200.00
+  - **GST:** $10.00
+  - **Total with GST:** $1,210.00
+
+The invoice is neatly organized, with clear sections for billing information, itemized charges, and totals.

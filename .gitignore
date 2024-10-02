@@ -1,4 +1,6 @@
 # Byte-compiled / optimized / DLL files
+
+/use-cases/Custom Scenario/images/*
 __pycache__/
 *.py[cod]
 *$py.class

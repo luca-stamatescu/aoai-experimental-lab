@@ -38,6 +38,15 @@ def load_use_case_from_file(file_path):
 # Load the CSV file into a DataFrame
 csv_file_path = './o1-vs-4o-scenarios.csv'
 df = pd.read_csv(csv_file_path)
+
+def get_overview(use_case):
+    row = df[df['Use Case'] == use_case]
+    if not row.empty:
+        return row.iloc[0]['Overview']
+    else:
+        return "Error - Overview not found."
+
+
 # Function to get the prompt based on the use case
 def get_prompt(use_case):
     row = df[df['Use Case'] == use_case]
@@ -121,6 +130,14 @@ def o1_call(system_message, user_message, result_dict):
 def compare_responses(response_4o, response_o1):  
     system_message = "You are an expert reviewer, who is helping review two candidates responses to a question."  
     user_message = f"Compare the following two responses and summarize the key differences:\n\nResponse 1 GPT-4o Model:\n{response_4o}\n\nResponse 2 o1 Model:\n{response_o1}. Generate a succinct comparison, and call out the key elements that make one response better than another. Be critical in your analysis."  
+    comparison_result, _ = call_o1_api(system_message, user_message)  
+      
+    return comparison_result  
+
+# Define function for comparing responses using O1  
+def compare_responses_simple(response_4o, response_o1):  
+    system_message = "You are an expert reviewer, who is helping review two candidates responses to a question."  
+    user_message = f"Compare the following two responses and summarize the key differences:\n\nResponse 1 GPT-4o Model:\n{response_4o}\n\nResponse 2 o1 Model:\n{response_o1}. Generate a succinct comparison, and call out the key elements that make one response better than another. Be succinct- only use 3 sentences."  
     comparison_result, _ = call_o1_api(system_message, user_message)  
       
     return comparison_result  
@@ -416,11 +433,19 @@ def main():
         # Retrieve the selected use case from session state
         selected_use_case = st.session_state.get("selected_title", "Custom Scenario")
 
+
+
+        st.markdown("##### High level overview")
+        overview = get_overview(selected_use_case)
+
+        st.markdown(overview)
+
+
+        st.markdown("##### Detailed breakdown")
         # Get the default input based on the selected use case
         default_input = get_prompt(selected_use_case)
 
         # Input box (takes up the width of the screen)   
-        st.markdown("##### Scenario description")
         #  
         user_input = st.text_area("", value=default_input, height=150)    
 
@@ -521,12 +546,19 @@ def main():
                     time_placeholder_o1.write(f"Elapsed time: {result_dict['o1']['time']:.2f} seconds")    
             st.markdown("---")
             # Compare the responses and display the comparison  
-            st.subheader("Comparison of Responses")  
+            st.subheader("Comparison of Responses - Overview")  
+
+            with st.spinner('Processing...'):
+                comparison_result = compare_responses_simple(result_dict['4o']['response'], result_dict['o1']['response'])  
+                st.write(comparison_result)
+    
+            st.markdown("---")
+            # Compare the responses and display the comparison  
+            st.subheader("Comparison of Responses - Detailed")  
 
             with st.spinner('Processing...'):
                 comparison_result = compare_responses(result_dict['4o']['response'], result_dict['o1']['response'])  
                 st.write(comparison_result)
-    
 
 
 if __name__ == "__main__":
