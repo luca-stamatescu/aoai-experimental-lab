@@ -332,9 +332,26 @@ def main():
             print(offline_mode)
     st.sidebar.markdown("---") 
     
+
+    
+    
+    # Insurance section
+    st.sidebar.header("Insurance")  
+    if st.sidebar.button("Home Insurance Claim ⭐️", key="insurance_1"):
+        set_selected_item("Home Insurance Claim")
+    if st.sidebar.button("Auto Insurance Claim ⭐️", key="insurance_2"):
+        set_selected_item("Auto Insurance Claim")
+    if st.sidebar.button("Customer Service and Retention", key="insurance_3"):
+        set_selected_item("Customer Service and Retention")
+    if st.sidebar.button("Product Development and Innovation", key="insurance_4"):
+        set_selected_item("Product Development and Innovation")
+    if st.sidebar.button("Risk Management and Compliance", key="insurance_5"):
+        set_selected_item("Risk Management and Compliance")
+    st.sidebar.markdown("---")  
+
     # Banking section
     st.sidebar.header("Banking")  
-    if st.sidebar.button("Credit Risk Assessment and Management", key="banking_1"):
+    if st.sidebar.button("Credit Risk Assessment and Management ⭐️", key="banking_1"):
         set_selected_item("Credit Risk Assessment and Management")
     if st.sidebar.button("Fraud Detection and Prevention", key="banking_2"):
         set_selected_item("Fraud Detection and Prevention")
@@ -345,23 +362,6 @@ def main():
     if st.sidebar.button("Investment and Portfolio Management", key="banking_5"):
         set_selected_item("Investment and Portfolio Management")
     st.sidebar.markdown("---") 
-    
-    
-    # Insurance section
-    st.sidebar.header("Insurance")  
-    if st.sidebar.button("Home Insurance Claim", key="insurance_1"):
-        set_selected_item("Home Insurance Claim")
-    if st.sidebar.button("Auto Insurance Claim", key="insurance_2"):
-        set_selected_item("Auto Insurance Claim")
-    if st.sidebar.button("Customer Service and Retention", key="insurance_3"):
-        set_selected_item("Customer Service and Retention")
-    if st.sidebar.button("Product Development and Innovation", key="insurance_4"):
-        set_selected_item("Product Development and Innovation")
-    if st.sidebar.button("Risk Management and Compliance", key="insurance_5"):
-        set_selected_item("Risk Management and Compliance")
-    st.sidebar.markdown("---")  
-
- 
 
     # Retail section
     st.sidebar.header("Retail")  
@@ -496,7 +496,7 @@ def main():
 
         # Input box (takes up the width of the screen)   
         #  
-        user_input = st.text_area("", value=default_input, height=150)    
+        user_input = st.text_area("", value=default_input, height=200)    
 
         # Section to upload supporting documents
         st.markdown("##### Upload Supporting Documents")
