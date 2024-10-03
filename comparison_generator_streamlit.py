@@ -26,8 +26,21 @@ load_dotenv("./.env")
 DELETE_TEMP_FOLDER = os.getenv("DELETE_TEMP_FOLDER", "true").lower() == "true"
 TEMP_FOLDER = "./use-cases/Custom Scenario/images"
 
+import os
+import logging
+
+# Configure logging
+logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
+
+# Get the value of the 'debug_mode' environment variable, default to 'true' if not set
+offline_mode = os.getenv('offline_mode', 'true')
+# Print the value
+print(f"offline_mode: {offline_mode}")
+# Log the value
+logging.info(f"offline_mode: {offline_mode}")
 
 
+offline_message="This feature is disabled in offline mode. Host this application locally with your own API keys to try it out live! Contact luca.stamatescu@microsoft.com for information."
 
 # Function to read XML file content as a string  
 def load_use_case_from_file(file_path):  
@@ -35,61 +48,80 @@ def load_use_case_from_file(file_path):
         return file.read()  
     
 
-# Load the CSV file into a DataFrame
-csv_file_path = './o1-vs-4o-scenarios.csv'
-df = pd.read_csv(csv_file_path)
 
-def get_overview(use_case):
+
+
+def get_csv_data(use_case,column_name):
+    # Load the CSV file into a DataFrame
+    csv_file_path = './o1-vs-4o-scenarios.csv'
+    df = pd.read_csv(csv_file_path)
     row = df[df['Use Case'] == use_case]
     if not row.empty:
-        return row.iloc[0]['Overview']
+        return row.iloc[0][column_name]
     else:
-        return "Error - Overview not found."
+        return f"Error - {column_name} not found."
 
+def save_csv_data(use_case, column_name, value):
+    # Check if debug_mode is true
+    if os.getenv('debug_mode') == 'true':
+        # Load the CSV file into a DataFrame
+        csv_file_path = './o1-vs-4o-scenarios.csv'
+        df = pd.read_csv(csv_file_path)
+        
+        # Check if the use case already exists
+        if use_case in df['Use Case'].values:
+            df.loc[df['Use Case'] == use_case, column_name] = value
+            # Save the updated DataFrame back to the CSV file
+            df.to_csv(csv_file_path, index=False)
+        else:
+            return f"Error - Use case '{use_case}' not found."
 
-# Function to get the prompt based on the use case
-def get_prompt(use_case):
-    row = df[df['Use Case'] == use_case]
-    if not row.empty:
-        return row.iloc[0]['Prompt']
-    else:
-        return "Error - Prompt not found."
 
 # Define function for calling GPT4o with streaming  
-def gpt4o_call(system_message, prompt, result_dict, queue):    
-    client = AzureOpenAI(    
-        api_version=os.getenv("4oAPI_VERSION"),    
-        azure_endpoint=os.getenv("4oAZURE_ENDPOINT"),    
-        api_key=os.getenv("4oAPI_KEY")    
-    )    
-    
-    start_time = time.time()    
-    
-    completion = client.chat.completions.create(    
-        model=os.getenv("4oMODEL"),    
-        messages=[    
-            {"role": "system", "content": system_message},    
-            {"role": "user", "content": prompt},    
-        ],    
-        stream=True  # Enable streaming  
-    )    
-    
-    response_text = ""  
-    for chunk in completion:  
-        if chunk.choices and chunk.choices[0].delta.content:  
-            response_text += chunk.choices[0].delta.content  
-            queue.put(response_text)  
-    
-    elapsed_time = time.time() - start_time    
-    
-    result_dict['4o'] = {    
-        'response': response_text,    
-        'time': elapsed_time    
-    }    
-    queue.put(f"Elapsed time: {elapsed_time:.2f} seconds")    
+def gpt4o_call(system_message, prompt, result_dict, queue,selected_use_case):    
+    if offline_mode == 'true':
+        response_text = get_csv_data(selected_use_case, 'gpt4o')
+        for i in range(0, len(response_text), 50):  # Simulate streaming
+            queue.put(response_text[:i+50])
+            time.sleep(0.2)
+        result_dict['4o'] = {
+            'response': response_text,
+            'time': get_csv_data(selected_use_case, 'gpt4o_time')
+        }
+    else:
+        client = AzureOpenAI(    
+            api_version=os.getenv("4oAPI_VERSION"),    
+            azure_endpoint=os.getenv("4oAZURE_ENDPOINT"),    
+            api_key=os.getenv("4oAPI_KEY")    
+        )    
+        
+        start_time = time.time()    
+        
+        completion = client.chat.completions.create(    
+            model=os.getenv("4oMODEL"),    
+            messages=[    
+                {"role": "system", "content": system_message},    
+                {"role": "user", "content": prompt},    
+            ],    
+            stream=True  # Enable streaming  
+        )    
+        
+        response_text = ""  
+        for chunk in completion:  
+            if chunk.choices and chunk.choices[0].delta.content:  
+                response_text += chunk.choices[0].delta.content  
+                queue.put(response_text)  
+        
+        elapsed_time = time.time() - start_time    
+        
+        result_dict['4o'] = {    
+            'response': response_text,    
+            'time': elapsed_time    
+        }    
+        queue.put(f"Elapsed time: {elapsed_time:.2f} seconds")    
     
 # Define function for calling O1 API  
-def call_o1_api(system_message, user_message):  
+def call_o1_api(system_message, user_message):
     prompt = system_message + user_message    
     
     url = os.getenv("o1AZURE_ENDPOINT")    
@@ -119,12 +151,23 @@ def call_o1_api(system_message, user_message):
     return messageo1, elapsed_time  
   
 # Define function for calling O1 and storing the result  
-def o1_call(system_message, user_message, result_dict):    
-    response, elapsed_time = call_o1_api(system_message, user_message)  
-    result_dict['o1'] = {    
-        'response': response,    
-        'time': elapsed_time    
-    }    
+def o1_call(system_message, user_message, result_dict,selected_use_case):    
+    if offline_mode == 'true':
+        response = get_csv_data(selected_use_case, 'o1')
+        # Sleep for the time taken by o1
+        o1_time_elapsed = get_csv_data(selected_use_case, 'o1_time')
+        time.sleep(o1_time_elapsed)
+        print("SLEPT FOR ", o1_time_elapsed)
+        result_dict['o1'] = {
+            'response': response,
+            'time': get_csv_data(selected_use_case, 'o1_time')
+        }
+    else:
+        response, elapsed_time = call_o1_api(system_message, user_message)  
+        result_dict['o1'] = {    
+            'response': response,    
+            'time': elapsed_time    
+        }    
   
 # Define function for comparing responses using O1  
 def compare_responses(response_4o, response_o1):  
@@ -282,7 +325,11 @@ def main():
     # # Hidden text input to store the selected item
     # st.sidebar.text_input("", key="selected_item", on_change=lambda: set_selected_item(st.session_state.selected_item))
     if st.sidebar.button("Custom Scenario", key="custom_1"):
-        set_selected_item("Custom Scenario")
+        if offline_mode == 'true':
+            st.toast(offline_message, icon="⚠️")
+        else:
+            set_selected_item("Custom Scenario")
+            print(offline_mode)
     st.sidebar.markdown("---") 
     
     # Banking section
@@ -436,14 +483,14 @@ def main():
 
 
         st.markdown("##### High level overview")
-        overview = get_overview(selected_use_case)
+        overview = get_csv_data(selected_use_case,"Overview")
 
         st.markdown(overview)
 
 
         st.markdown("##### Detailed breakdown")
         # Get the default input based on the selected use case
-        default_input = get_prompt(selected_use_case)
+        default_input = get_csv_data(selected_use_case,"Prompt")
 
         # Input box (takes up the width of the screen)   
         #  
@@ -463,15 +510,21 @@ def main():
         
         # Button to delete uploaded files
         if st.button("Delete uploaded files"):
-            if DELETE_TEMP_FOLDER and os.path.exists(TEMP_FOLDER):
-                shutil.rmtree(TEMP_FOLDER)  
-                st.session_state.descriptions=None
+            if offline_mode == 'true':
+                st.toast(offline_message, icon="⚠️")
+            else:
+                if DELETE_TEMP_FOLDER and os.path.exists(TEMP_FOLDER):
+                    shutil.rmtree(TEMP_FOLDER)  
+                    st.session_state.descriptions=None
             
 
         # Process uploaded files
         if uploaded_files and st.button("Upload Files"):
-            process_inputs(uploaded_files)
-            load_images_and_descriptions("Custom Scenario")
+            if os.getenv('debug_mode') == 'true':
+                st.toast(offline_message, icon="⚠️")
+            else:
+                process_inputs(uploaded_files)
+                load_images_and_descriptions("Custom Scenario")
     
         # Display images as tiles with descriptions  
         if 'descriptions' in st.session_state and st.session_state.descriptions!=None:
@@ -518,8 +571,8 @@ def main():
                 
                 # Start threads for both API calls    
                 threads = []    
-                t1 = threading.Thread(target=gpt4o_call, args=("You are a helpful AI assistant.", st.session_state['prompt'], result_dict, queue))    
-                t2 = threading.Thread(target=o1_call, args=("You are a helpful AI assistant.", st.session_state['prompt'], result_dict))    
+                t1 = threading.Thread(target=gpt4o_call, args=("You are a helpful AI assistant.", st.session_state['prompt'], result_dict, queue,selected_use_case))    
+                t2 = threading.Thread(target=o1_call, args=("You are a helpful AI assistant.", st.session_state['prompt'], result_dict,selected_use_case))    
                 threads.append(t1)    
                 threads.append(t2)    
                 t1.start()    
@@ -539,26 +592,49 @@ def main():
                 with col1:
                     response_placeholder_4o.write(result_dict['4o']['response'])  
                     time_placeholder_4o.write(f"Elapsed time: {result_dict['4o']['time']:.2f} seconds")  
+                    if os.getenv('debug_mode') == 'true':
+                        save_csv_data(selected_use_case, "gpt4o_time", float(round(result_dict['4o']['time'],2)))
+                        save_csv_data(selected_use_case, "gpt4o", result_dict['4o']['response'])
+
+
                 
                 # Display the O1 response and elapsed time    
                 with col2:    
                     response_placeholder_o1.write(result_dict['o1']['response'])   
                     time_placeholder_o1.write(f"Elapsed time: {result_dict['o1']['time']:.2f} seconds")    
+                    if os.getenv('debug_mode') == 'true':
+                        save_csv_data(selected_use_case, "o1_time", float(round(result_dict['o1']['time'],2)))
+                        save_csv_data(selected_use_case, "o1", result_dict['o1']['response'])
+
+
             st.markdown("---")
             # Compare the responses and display the comparison  
             st.subheader("Comparison of Responses - Overview")  
 
             with st.spinner('Processing...'):
-                comparison_result = compare_responses_simple(result_dict['4o']['response'], result_dict['o1']['response'])  
+                if offline_mode == 'true':
+                    comparison_result = get_csv_data(selected_use_case, 'simple_comparison')
+                    # Simulate a wait time
+                    time.sleep(15)
+                else:
+                    comparison_result = compare_responses_simple(result_dict['4o']['response'], result_dict['o1']['response'])  
                 st.write(comparison_result)
-    
+                save_csv_data(selected_use_case, "simple_comparison", comparison_result)
+
             st.markdown("---")
             # Compare the responses and display the comparison  
             st.subheader("Comparison of Responses - Detailed")  
 
             with st.spinner('Processing...'):
-                comparison_result = compare_responses(result_dict['4o']['response'], result_dict['o1']['response'])  
+                if offline_mode == 'true':
+                    comparison_result = get_csv_data(selected_use_case, 'complex_comparison')
+                    # Simulate a wait time
+                    time.sleep(15)
+                else:
+                    comparison_result = compare_responses(result_dict['4o']['response'], result_dict['o1']['response'])  
                 st.write(comparison_result)
+                save_csv_data(selected_use_case, "complex_comparison", comparison_result)
+
 
 
 if __name__ == "__main__":
