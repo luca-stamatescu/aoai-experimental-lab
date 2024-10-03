@@ -455,7 +455,9 @@ def main():
         st.markdown("This tool is designed to help you explore the differences between OpenAI's o1-preview model, and the GPT-4o model. o1 is a new class of model which unlocks advanced reasoning capabilities for LLMs. By spending more time upfront thinking about the problem, o1 considers a range of edge cases and potential situations to arrive at a much better conclusion. This comes at the cost of latency.\n o1 is poised to transform many industries, and this tool is set up to let you explore these.")
         st.markdown("### Instructions")
         st.markdown("Click on a scenario on the left to get started. You can also upload your own scenario by selecting 'Custom Scenario'.")
-
+        if offline_mode=='true':
+            st.markdown("### ⚠️Offline Mode⚠️")
+            st.markdown("This tool is currently running in offline mode. You are still able to explore and run all the scenarios, showcasing the behaviour of GPT-4o and o1. However, you won't be able to modify the prompts, upload files or add your own custom scenarios. To try it out live, host this application locally with your own API keys. Contact Luca.Stamatescu@microsoft.com for further information.")
 
     else:
         # Main content
@@ -520,7 +522,7 @@ def main():
 
         # Process uploaded files
         if uploaded_files and st.button("Upload Files"):
-            if os.getenv('debug_mode') == 'true':
+            if offline_mode == 'true':
                 st.toast(offline_message, icon="⚠️")
             else:
                 process_inputs(uploaded_files)
