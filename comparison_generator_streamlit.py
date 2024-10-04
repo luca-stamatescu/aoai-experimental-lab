@@ -117,7 +117,7 @@ def gpt4o_call(system_message, user_message, result_dict, queue, selected_use_ca
         queue.put(f"Elapsed time: {elapsed_time:.2f} seconds")    
 
 # Define function for calling O1 and storing the result  
-def o1_call(system_message, user_message, result_dict, queue, selected_use_case=None):    
+def o1_call(system_message, user_message, result_dict=None, queue=None, selected_use_case=None):    
     if offline_mode == 'true':
         response = get_csv_data(selected_use_case, 'o1')
         # Sleep for the time taken by o1
@@ -137,25 +137,21 @@ def o1_call(system_message, user_message, result_dict, queue, selected_use_case=
         
         start_time = time.time()    
         
-        prompt = system_message + "\n\n" + user_message
+        prompt = system_message + user_message
 
         completion = client.chat.completions.create(    
             model=os.getenv("o1API_MODEL"),    
             messages=[      
                 {"role": "user", "content": prompt},    
             ],    
-        )    
+        )
+
         
-        response_text = ""  
-        for chunk in completion:  
-            if chunk.choices and chunk.choices[0].delta.content:  
-                response_text += chunk.choices[0].delta.content  
-                queue.put(response_text)  
         
         elapsed_time = time.time() - start_time    
         
         result_dict['o1'] = {    
-            'response': response_text,    
+            'response': completion.choices[0].message.content,    
             'time': elapsed_time    
         }    
         queue.put(f"Elapsed time: {elapsed_time:.2f} seconds")    
