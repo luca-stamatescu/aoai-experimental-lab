@@ -483,7 +483,7 @@ def main():
 
         # Input box (takes up the width of the screen)   
         #  
-        user_input = st.text_area("", value=default_input, height=200)    
+        user_input = st.text_area("", value=default_input, height=500)    
 
         # Section to upload supporting documents
         st.markdown("##### Upload Supporting Documents")
