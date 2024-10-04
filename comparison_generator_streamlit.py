@@ -47,10 +47,6 @@ def load_use_case_from_file(file_path):
     with open(file_path, 'r') as file:  
         return file.read()  
     
-
-
-
-
 def get_csv_data(use_case,column_name):
     # Load the CSV file into a DataFrame
     csv_file_path = './o1-vs-4o-scenarios.csv'
@@ -78,7 +74,7 @@ def save_csv_data(use_case, column_name, value):
 
 
 # Define function for calling GPT4o with streaming  
-def gpt4o_call(system_message, prompt, result_dict, queue,selected_use_case):    
+def gpt4o_call(system_message, user_message, result_dict, queue, selected_use_case):    
     if offline_mode == 'true':
         response_text = get_csv_data(selected_use_case, 'gpt4o')
         for i in range(0, len(response_text), 50):  # Simulate streaming
@@ -101,7 +97,7 @@ def gpt4o_call(system_message, prompt, result_dict, queue,selected_use_case):
             model=os.getenv("4oMODEL"),    
             messages=[    
                 {"role": "system", "content": system_message},    
-                {"role": "user", "content": prompt},    
+                {"role": "user", "content": user_message},    
             ],    
             stream=True  # Enable streaming  
         )    
@@ -119,39 +115,9 @@ def gpt4o_call(system_message, prompt, result_dict, queue,selected_use_case):
             'time': elapsed_time    
         }    
         queue.put(f"Elapsed time: {elapsed_time:.2f} seconds")    
-    
-# Define function for calling O1 API  
-def call_o1_api(system_message, user_message):
-    prompt = system_message + user_message    
-    
-    url = os.getenv("o1AZURE_ENDPOINT")    
-    headers = {    
-        "api-key": os.getenv("o1API_KEY"),    
-        "Content-Type": "application/json"    
-    }    
-    data = {    
-        "messages": [    
-            {    
-                "role": "user",    
-                "content": [    
-                    {"type": "text", "text": prompt}    
-                ],    
-            }    
-        ]    
-    }    
-    
-    start_time = time.time()    
-    
-    response = requests.post(url, headers=headers, json=data)    
-    response_json = response.json()    
-    messageo1 = response_json["choices"][0]["message"]["content"]    
-    
-    elapsed_time = time.time() - start_time    
-    
-    return messageo1, elapsed_time  
-  
+
 # Define function for calling O1 and storing the result  
-def o1_call(system_message, user_message, result_dict,selected_use_case):    
+def o1_call(system_message, user_message, result_dict, queue, selected_use_case=None):    
     if offline_mode == 'true':
         response = get_csv_data(selected_use_case, 'o1')
         # Sleep for the time taken by o1
@@ -163,17 +129,42 @@ def o1_call(system_message, user_message, result_dict,selected_use_case):
             'time': get_csv_data(selected_use_case, 'o1_time')
         }
     else:
-        response, elapsed_time = call_o1_api(system_message, user_message)  
+        client = AzureOpenAI(    
+            api_version=os.getenv("o1API_VERSION"),    
+            azure_endpoint=os.getenv("o1AZURE_ENDPOINT"),    
+            api_key=os.getenv("o1API_KEY")    
+        )    
+        
+        start_time = time.time()    
+        
+        prompt = system_message + "\n\n" + user_message
+
+        completion = client.chat.completions.create(    
+            model=os.getenv("o1API_MODEL"),    
+            messages=[      
+                {"role": "user", "content": prompt},    
+            ],    
+        )    
+        
+        response_text = ""  
+        for chunk in completion:  
+            if chunk.choices and chunk.choices[0].delta.content:  
+                response_text += chunk.choices[0].delta.content  
+                queue.put(response_text)  
+        
+        elapsed_time = time.time() - start_time    
+        
         result_dict['o1'] = {    
-            'response': response,    
+            'response': response_text,    
             'time': elapsed_time    
         }    
+        queue.put(f"Elapsed time: {elapsed_time:.2f} seconds")    
   
 # Define function for comparing responses using O1  
 def compare_responses(response_4o, response_o1):  
     system_message = "You are an expert reviewer, who is helping review two candidates responses to a question."  
     user_message = f"Compare the following two responses and summarize the key differences:\n\nResponse 1 GPT-4o Model:\n{response_4o}\n\nResponse 2 o1 Model:\n{response_o1}. Generate a succinct comparison, and call out the key elements that make one response better than another. Be critical in your analysis."  
-    comparison_result, _ = call_o1_api(system_message, user_message)  
+    comparison_result, _ = o1_call(system_message, user_message)  
       
     return comparison_result  
 
@@ -181,7 +172,7 @@ def compare_responses(response_4o, response_o1):
 def compare_responses_simple(response_4o, response_o1):  
     system_message = "You are an expert reviewer, who is helping review two candidates responses to a question."  
     user_message = f"Compare the following two responses and summarize the key differences:\n\nResponse 1 GPT-4o Model:\n{response_4o}\n\nResponse 2 o1 Model:\n{response_o1}. Generate a succinct comparison, and call out the key elements that make one response better than another. Be succinct- only use 3 sentences."  
-    comparison_result, _ = call_o1_api(system_message, user_message)  
+    comparison_result, _ = o1_call(system_message, user_message)  
       
     return comparison_result  
 
