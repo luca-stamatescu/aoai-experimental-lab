@@ -138,7 +138,7 @@ def o1_call(system_message, user_message):
     return messageo1, elapsed_time  
 
 # Define function for calling O1 and storing the result  
-def o1_call_simultaneous_handler(system_message, user_message, result_dict=None, queue=None, selected_use_case=None):    
+def o1_call_simultaneous_handler(system_message, user_message, result_dict,selected_use_case ):    
     if offline_mode == 'true':
         response = get_csv_data(selected_use_case, 'o1')
         # Sleep for the time taken by o1
@@ -530,12 +530,12 @@ def main():
             with st.spinner('Processing...'):
                 if st.session_state['descriptions']:  
                     # Ensure descriptions is a string
-                    conactenated_descriptions=""
+                    concatenated_descriptions=""
                     descriptions = st.session_state['descriptions']
                     if isinstance(descriptions, list):
                         for description in descriptions:
-                            conactenated_descriptions=conactenated_descriptions+description[1]
-                    st.session_state['prompt'] = user_input + "\n\n" + conactenated_descriptions
+                            concatenated_descriptions=concatenated_descriptions+description[1]
+                    st.session_state['prompt'] = user_input + "\n\n" + concatenated_descriptions
                 else:  
                     st.session_state['prompt'] = user_input
 
